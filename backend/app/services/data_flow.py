@@ -12,6 +12,7 @@ from dataclasses import dataclass, field
 from typing import Any, Callable
 
 from app.store import store
+from app.services import quality_gate
 
 # ---------------------------------------------------------------------------
 # 链路副作用记录
@@ -553,21 +554,14 @@ def flow_quality_to_mon_to_report(quality_rule_id: int) -> list[FlowEffect]:
             ))
             break
 
-    # 生成异常报告
-    report_rows = store.rows("report_task")
-    for rrow in report_rows:
-        if rrow.get("status") == "草稿":
-            rrow["status"] = "已生成"
-            rrow["pending"] = False
-            rrow["报告类型"] = "质量异常报告"
-            rrow["特征范围"] = target_feat
-            rrow["最近生成"] = datetime.datetime.now().isoformat()
-            rrow["triggered_by"] = f"quality_rule/{rule_no}"
-            effects.append(FlowEffect(
-                "启动生成", "report_task", int(rrow.get("id", 0)),
-                f"质量规则 {rule_no} 阻断后生成异常报告 {rrow.get('报告编号','')}",
-            ))
-            break
+    # 生成异常报告：草稿由质量阻断台账认领，这里只把同一事件的明细稳定写回
+    # 已认领的报告，绝不另外占用草稿。
+    detail_effect = quality_gate.attach_report_detail(int(qr.get("id", 0)))
+    if detail_effect is not None:
+        effects.append(FlowEffect(
+            "启动生成", "report_task", int(detail_effect["报告ID"]),
+            f"质量规则 {rule_no} 阻断后写入异常报告明细 {detail_effect['报告编号']}",
+        ))
 
     return effects
 

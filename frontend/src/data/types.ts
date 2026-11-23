@@ -30,6 +30,30 @@ export type PageResult = {
 export type ActionResult = {
   ok: boolean
   message: string
+  gate?: GateResult | null
+}
+
+export type GateResult = {
+  ok: boolean
+  message: string
+  fact?: Record<string, unknown>
+  report?: Record<string, unknown> | null
+  recovery?: Record<string, unknown>
+  reused?: boolean
+  linked?: boolean
+  scope?: string[]
+  partitions?: string[]
+}
+
+export type QualityGateView = {
+  ok?: boolean
+  fact?: Record<string, unknown>
+  report?: Record<string, unknown>
+  evidence?: Record<string, string>
+  material?: Record<string, string>
+  blocked?: string[]
+  released?: string[]
+  message?: string
 }
 
 export type OverviewResult = {

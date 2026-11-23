@@ -10,6 +10,7 @@ from fastapi.responses import StreamingResponse
 
 from app.schemas import ActionPayload, ActionResult, EntryPayload, PageResult
 from app.services import service_for
+from app.services import quality_gate
 from app.services.data_flow import FlowEffect, FLOW_TRIGGERS, flow_engine
 
 router = APIRouter(prefix="/api", tags=["业务资源"])
@@ -74,6 +75,21 @@ def export_entries(
     )
 
 
+@router.get("/quality-gate/facts")
+def quality_gate_facts(rule_id: int | None = Query(default=None),
+                       report_id: int | None = Query(default=None)) -> dict[str, Any]:
+    """质量阻断检查事实：工作台与报告页共用的检查依据。"""
+    if rule_id is None and report_id is None:
+        return {"facts": quality_gate.list_facts()}
+    return quality_gate.fact_overview(rule_id=rule_id, report_id=report_id)
+
+
+@router.get("/quality-gate/report/{report_id}")
+def quality_gate_report(report_id: int) -> dict[str, Any]:
+    """报告页读取：报告行 + 关联的检查事实与成稿进度。"""
+    return quality_gate.report_view(report_id)
+
+
 @router.get("/{module}/{entry_id}", response_model=dict)
 def get_entry(module: str, entry_id: int) -> dict[str, Any]:
     service = require_service(module)
@@ -110,8 +126,14 @@ def get_flow_trace(module: str, entry_id: int):
 @router.post("/{module}/{entry_id}/actions", response_model=ActionResult)
 def run_action(module: str, entry_id: int, payload: ActionPayload) -> ActionResult:
     service = require_service(module)
-    entry, message = service.run_action(entry_id, payload.action.strip())
+    action = payload.action.strip()
+    params = dict(payload.params or {})
+    if payload.remark:
+        params.setdefault("remark", payload.remark)
+    entry, message, gate = service.run_action(entry_id, action, params)
     # 动作执行后触发跨模块数据流
-    flow_result = flow_engine.on_action(module, payload.action.strip(), entry_id)
-    return ActionResult(ok=entry is not None, message=message, entry=entry,
-                        flow=flow_result if flow_result["hits"] > 0 else None)
+    flow_result = flow_engine.on_action(module, action, entry_id)
+    ok = entry is not None and (gate is None or bool(gate.get("ok")))
+    return ActionResult(ok=ok, message=message, entry=entry,
+                        flow=flow_result if flow_result["hits"] > 0 else None,
+                        gate=gate)

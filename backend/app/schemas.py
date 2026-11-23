@@ -20,6 +20,7 @@ class ActionResult(BaseModel):
     message: str
     entry: dict[str, Any] | None = None
     flow: dict[str, Any] | None = None
+    gate: dict[str, Any] | None = None
 
 
 class EntryPayload(BaseModel):
@@ -30,3 +31,4 @@ class EntryPayload(BaseModel):
 class ActionPayload(BaseModel):
     action: str
     remark: str | None = None
+    params: dict[str, Any] = Field(default_factory=dict)
